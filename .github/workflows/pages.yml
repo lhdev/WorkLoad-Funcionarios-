@@ -24,6 +24,14 @@ jobs:
     steps:
       - name: Baixar o repositório
         uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validar sintaxe e testes
+        run: |
+          npm run check
+          npm test
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
       - name: Preparar arquivos do site

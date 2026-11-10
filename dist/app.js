@@ -1150,21 +1150,25 @@ function plannedProgressAt(project, date) {
   );
 }
 function measurementForm(projectId = "") {
-  if (!state.projects.length) {
-    toast("Cadastre um projeto antes de registrar medições.", true);
+  const eligibleProjects = state.projects.filter(
+    (project) => project.start <= today(),
+  );
+  if (!eligibleProjects.length) {
+    toast("Só é possível registrar medição a partir da data de início do projeto.", true);
     return;
   }
   const defaultProject =
-    state.projects.find((project) => project.id === projectId) ||
-    state.projects[0];
+    eligibleProjects.find((project) => project.id === projectId) ||
+    eligibleProjects[0];
   openDialog(
-    `<div class="eyebrow">AVANÇO FÍSICO</div><h2>Registrar medição</h2><p>Informe o avanço físico real apurado na data. Uma nova medição no mesmo dia atualiza o registro existente.</p><form id="measurement-form"><div class="form-grid"><label class="span2">Projeto<select name="projectId" required>${state.projects.map((project) => `<option value="${esc(project.id)}" ${project.id === defaultProject.id ? "selected" : ""}>${esc(project.name)} · ${esc(project.uf)}</option>`).join("")}</select></label>${field("Data da medição", "date", today(), "date", `required max="${today()}"`)}${field("Avanço real (%)", "progress", "", "number", 'required min="0" max="100" step="1"')}<label class="span2">Observação (opcional)<textarea name="note" rows="3" maxlength="500" placeholder="Ex.: medição aprovada pelo gestor"></textarea></label></div><div id="form-error" role="alert"></div><div class="modal-actions">${button("Cancelar", "close")}<button class="primary" type="submit">Salvar medição</button></div></form>`,
+    `<div class="eyebrow">AVANÇO FÍSICO</div><h2>Registrar medição</h2><p>Informe o avanço físico real apurado na data. Uma nova medição no mesmo dia atualiza o registro existente.</p><form id="measurement-form"><div class="form-grid"><label class="span2">Projeto<select name="projectId" required>${eligibleProjects.map((project) => `<option value="${esc(project.id)}" ${project.id === defaultProject.id ? "selected" : ""}>${esc(project.name)} · ${esc(project.uf)}</option>`).join("")}</select></label>${field("Data da medição", "date", today(), "date", `required min="${defaultProject.start}" max="${today()}"`)}${field("Avanço real (%)", "progress", "", "number", 'required min="0" max="100" step="1"')}<label class="span2">Observação (opcional)<textarea name="note" rows="3" maxlength="500" placeholder="Ex.: medição aprovada pelo gestor"></textarea></label></div><div id="form-error" role="alert"></div><div class="modal-actions">${button("Cancelar", "close")}<button class="primary" type="submit">Salvar medição</button></div></form>`,
   );
   const form = $("#measurement-form");
   const fillExisting = () => {
     const project = state.projects.find(
       (item) => item.id === form.elements.projectId.value,
     );
+    form.elements.date.min = project.start;
     const existing = (state.measurements || []).find(
       (measurement) =>
         measurement.projectId === project.id &&

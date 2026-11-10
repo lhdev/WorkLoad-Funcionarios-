@@ -14,10 +14,32 @@ export function measuredProgress(s,projectId,date=today()){
  const entries=(s.measurements||[]).filter(measurement=>measurement.projectId===projectId&&measurement.date<=date).sort((a,b)=>b.date.localeCompare(a.date));
  return entries.length?entries[0].progress:null;
 }
+export function demoMeasurements(projects,date=today()){
+ const todayTime=Date.parse(date+'T12:00:00Z'),checkpoints=[0.2,0.42,0.66,0.84];
+ return projects.flatMap(project=>{
+  const start=Date.parse(project.start+'T12:00:00Z'),end=Date.parse(project.end+'T12:00:00Z'),duration=end-start;
+  if(duration<=0||start>todayTime)return [];
+  const bias=(Number(project.id.replace(/\D/g,''))%5)-2;
+  const samples=checkpoints.map(ratio=>{
+   const time=start+Math.round(duration*ratio);
+   if(time>todayTime)return null;
+   const sCurve=100*(3*ratio**2-2*ratio**3);
+   return {date:new Date(time).toISOString().slice(0,10),progress:Math.max(0,Math.min(99,Math.round(sCurve+bias))),note:'Dado fictício para demonstração'};
+  }).filter(Boolean);
+  const elapsed=Math.max(0,Math.min(1,(todayTime-start)/duration));
+  const currentProgress=project.status==='Concluída'?100:Math.max(samples.at(-1)?.progress||0,Math.round(100*(3*elapsed**2-2*elapsed**3)+bias));
+  const currentDate=new Date(todayTime).toISOString().slice(0,10);
+  if(samples.at(-1)?.date===currentDate)samples[samples.length-1].progress=currentProgress;
+  else samples.push({date:currentDate,progress:currentProgress,note:'Dado fictício para demonstração'});
+  return samples.map(sample=>({id:`demo-${project.id}-${sample.date}`,projectId:project.id,...sample}));
+ });
+}
 export function migrate(s){
  if(!s||s.version!==1||!Array.isArray(s.employees))throw Error('Backup inválido ou versão incompatível.');
  const next=structuredClone(s);
  if(!Object.hasOwn(next,'measurements'))next.measurements=[];
+ const untouchedDemo=next.history?.some(entry=>entry.id==='demo'&&entry.action==='Base fictícia criada')&&next.projects.length===16&&next.employees.length===48&&next.projects.every((project,index)=>project.id===`p${index}`)&&next.employees.every((employee,index)=>employee.id===`e${index}`);
+ if(untouchedDemo&&Array.isArray(next.measurements)&&!next.measurements.length)next.measurements=demoMeasurements(next.projects);
  for(const employee of next.employees)if(!Object.hasOwn(employee,'department'))employee.department=legacyDepartment;
  for(const project of next.projects){
   if(!project.departmentMinimums)project.departmentMinimums=Object.fromEntries(departments.map(department=>[department,0]));
@@ -37,7 +59,7 @@ export function validate(s){
  const unique=arr=>arr.every(x=>required(x.id))&&new Set(arr.map(x=>x.id)).size===arr.length;
  if(!unique(s.projects)||!unique(s.employees))throw Error('Identificadores inválidos ou duplicados.');
  const measurements=s.measurements===undefined?[]:s.measurements;
- if(!Array.isArray(measurements)||measurements.length>50000||!unique(measurements)||measurements.some(measurement=>!s.projects.some(project=>project.id===measurement.projectId)||!date(measurement.date)||!Number.isInteger(measurement.progress)||measurement.progress<0||measurement.progress>100||!str(measurement.note||'',500)))throw Error('Medição inválida ou relacionada a projeto inexistente.');
+ if(!Array.isArray(measurements)||measurements.length>50000||!unique(measurements)||measurements.some(measurement=>{const project=s.projects.find(item=>item.id===measurement.projectId);return !project||!date(measurement.date)||measurement.date<project.start||measurement.date>today()||!Number.isInteger(measurement.progress)||measurement.progress<0||measurement.progress>100||!str(measurement.note||'',500)}))throw Error('Medição inválida: confira projeto, data, avanço e observação.');
  const measurementKeys=measurements.map(measurement=>measurement.projectId+'|'+measurement.date);
  if(new Set(measurementKeys).size!==measurementKeys.length)throw Error('Existe mais de uma medição para o mesmo projeto e data.');
  if(!s.settings||!Number.isInteger(s.settings.warningDays)||s.settings.warningDays<1||s.settings.warningDays>180)throw Error('Alerta deve ser entre 1 e 180 dias.');
