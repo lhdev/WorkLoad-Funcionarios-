@@ -1,0 +1,100 @@
+# Workload Funcionários
+
+Aplicativo web funcional em português brasileiro para gestão de alocação por obra. Inclui 16 projetos em 16 estados e 48 funcionários fictícios. As coordenadas são dos projetos; o aplicativo não solicita geolocalização nem rastreia pessoas.
+
+## Executar no computador
+
+Requisito: **Node.js 24 ou superior**. Não é necessário instalar pacotes.
+
+1. Abra um terminal nesta pasta.
+2. Execute `npm start`.
+3. Abra **http://localhost:4173**.
+4. Mantenha o terminal aberto durante o uso. Para encerrar, pressione Ctrl+C.
+
+No Windows também é possível executar `iniciar.cmd`. Não abra `index.html` diretamente, porque os módulos JavaScript precisam de um servidor HTTP.
+
+A primeira execução cria `data/workload.sqlite` e carrega a demonstração. Reiniciar o servidor mantém a base. O módulo SQLite integrado do Node 24 pode emitir um aviso de recurso experimental; não impede a execução.
+
+Para escolher outra porta no PowerShell:
+
+```powershell
+$env:PORT = '4180'
+npm start
+```
+
+`WORKLOAD_DATA_DIR` permite escolher outra pasta para o banco. Prefira uma pasta de dados local fora de sincronização simultânea pelo OneDrive; use o backup JSON para transporte. Não abra o mesmo arquivo SQLite simultaneamente em computadores diferentes.
+
+## Modos de persistência
+
+| Execução | Onde os dados ficam | Limite de uso |
+| --- | --- | --- |
+| `npm start` | SQLite no servidor local | Um espaço de trabalho neste computador; várias abas com revisão e detecção de conflito |
+| Demonstração hospedada / arquivos de `dist` em servidor estático | `localStorage` do navegador | Uso individual em uma aba, sem sincronização entre dispositivos |
+
+`runtime.js` declara o modo estático. O servidor Node responde a esse arquivo com a configuração de SQLite. Falhas do servidor não provocam troca silenciosa para outra base. Nenhum dado do SQLite local é enviado à versão hospedada; a demonstração hospedada é inicializada separadamente.
+
+Os dados do navegador pertencem à origem e ao perfil utilizado. Excluir o armazenamento do site apaga essa base. Exporte backups regulares em **Configurações → Exportar backup JSON**. O botão Exportar dados no cabeçalho também gera o backup completo. A versão hospedada é uma demonstração privada, não um backend compartilhado.
+
+## Como usar
+
+- **Dashboard:** indicadores, distribuição de equipes, progresso físico, prazo decorrido, duração total prevista e dias restantes. Busca, status e UF filtram as obras e os indicadores; os totais gerais de funcionários disponíveis continuam identificados como totais da base. O gráfico exibe as seis maiores equipes; a tabela contém todas as obras filtradas.
+- **Mapa de obras:** zoom, arraste, pins e lista de projetos. Selecione um pin para ver cidade/UF, equipe, status, progresso e responsáveis. Selecione Ver projeto para editar. As coordenadas iniciais representam centros das cidades da demonstração; substitua pelas coordenadas reais das obras.
+- **Alocação de equipe:** colunas por obra e Sem alocação. Arraste um cartão entre colunas. A ação só é gravada após confirmação. No celular ou pelo teclado, use Mover. Role o quadro horizontalmente para acessar as demais obras.
+- **Projetos:** criar, consultar, editar e excluir. Configure nome, cidade, UF, coordenadas, datas, status, progresso, metas e campos adicionais com nome/valor (cliente, contrato, fase, orçamento etc.). Os campos adicionais são específicos de cada projeto e podem ser acrescentados/removidos. Aloque a equipe pelo quadro e então selecione um ou vários responsáveis no formulário do projeto.
+- **Funcionários:** criar, editar, consultar, excluir e realocar. Matrícula é obrigatória e única; nenhuma informação pessoal real é necessária.
+- **Central de alertas:** selecione um alerta para abrir o projeto e corrigir sua causa.
+- **Histórico:** registra transferências, criação, edição, exclusão e desalocação por exclusão de projeto. Os registros preservam os nomes dos projetos e das pessoas no momento do evento.
+- **Configurações:** antecedência dos alertas, exportação, importação e criação de base vazia.
+
+## Regras e validações
+
+1. Projeto Ativo sem responsáveis gera alerta crítico. Responsáveis devem integrar a equipe da própria obra.
+2. Projeto sem funcionários gera alerta, inclusive quando planejado ou pausado.
+3. Prazo vencido gera alerta; prazo em até 14 dias por padrão gera aviso. A antecedência é configurável entre 1 e 180 dias.
+4. Projetos Concluídos não geram alertas e não recebem novas alocações até serem reabertos.
+5. Transferir um responsável remove sua designação na origem, sem designá-lo automaticamente no destino. Antes de confirmar, a interface destaca a retirada e os novos alertas de origem (inclusive se ficar sem responsável ou sem equipe). A transferência é permitida após confirmação explícita; o alerta permanece visível até correção. Não há bloqueio absoluto de obras sem responsável, pois o cadastro inicial pode estar incompleto.
+6. Excluir obra pede confirmação, preserva o histórico e envia a equipe para Sem alocação. Excluir funcionário remove suas designações e avisa se ele era responsável.
+7. Datas devem existir, e fim deve ser igual ou posterior ao início. Progresso fica entre 0 e 100. Latitude e longitude precisam estar no intervalo geográfico aproximado do Brasil. A validação de coordenadas é por faixa, não por geocodificação ou conferência exata de fronteira.
+8. Backups passam por validação de versão, tipos, identificadores únicos, matrículas e integridade das referências. A importação substitui a base inteira somente após confirmação. Limite de 5 MB por gravação/importação; até 1.000 projetos, 10.000 funcionários e 50.000 eventos no esquema. Esses limites são de validação, não garantia de desempenho nesses volumes.
+
+Os prazos usam dias corridos e a data corrente em America/Sao_Paulo. Datas da interface usam pt-BR. Tempo restante é uma diferença entre a data atual e a conclusão prevista, não uma previsão automática baseada em produtividade. A faixa do cronograma compara percentual do prazo decorrido e progresso informado. Os alertas são recalculados ao navegar/alterar a base; não há envio de e-mail ou notificação em segundo plano.
+
+## Substituir a demonstração por dados reais
+
+1. Exporte o backup fictício como referência.
+2. Em Configurações, selecione Criar base vazia e confirme.
+3. Cadastre projetos e funcionários, defina coordenadas, datas, metas e campos adicionais.
+4. Aloque funcionários e designe os responsáveis de cada obra.
+5. Confira os alertas e exporte o primeiro backup real.
+
+Também é possível editar uma cópia do backup JSON e importá-la. Preserve `version: 1`, `settings`, os identificadores únicos e as referências: `employee.projectId` deve ser `null` ou um ID existente, e `project.responsibles` contém IDs de funcionários alocados nesse projeto. Valores de campos adicionais são texto. O arquivo `dist/seed.js` contém o gerador de demonstração, executado apenas quando ainda não há base.
+
+Não inclua documentos, salários, localização individual ou outros dados pessoais desnecessários. Se importar uma base real na versão hospedada, os registros ficam no navegador; para uso regular, prefira o servidor local ou uma implantação empresarial com controle de acesso.
+
+## Arquitetura e edição
+
+- `dist/index.html` e `dist/styles.css`: estrutura e interface responsiva.
+- `dist/app.js`: páginas, mapa, Kanban, formulários, confirmação, backup e persistência.
+- `dist/domain.js`: validações, alertas, calendário e transferências; compartilhado pelo frontend e backend.
+- `dist/seed.js`: dados inteiramente fictícios, com datas relativas ao primeiro acesso.
+- `dist/runtime.js`: seleciona o modo do armazenamento em hospedagem estática.
+- `server.mjs`: servidor HTTP e API `GET /api/state`, `PUT /api/state`.
+- `data/workload.sqlite`: banco criado em execução e excluído do versionamento.
+- `tests/`: testes de regras e da API, com banco temporário isolado.
+
+Frontend em JavaScript nativo com Leaflet 1.9.4 incluído em `dist/vendor` (licença BSD-2-Clause no mesmo diretório). Sem etapa de compilação. Node.js fornece HTTP e SQLite, sem dependências de backend. O banco mantém um snapshot JSON com revisão incremental e atualização condicional atômica para impedir sobrescritas entre abas. Em conflito, a interface carrega a nova revisão e solicita repetir a alteração.
+
+O mapa base usa tiles do OpenStreetMap e exige internet, conforme a [política de utilização](https://operations.osmfoundation.org/policies/tiles/). As fontes opcionais são carregadas do Google Fonts, com fontes locais de reserva. A biblioteca do mapa é incluída no projeto; cadastros e quadro funcionam sem esses serviços externos após o app carregar. Para tráfego elevado, contrate um provedor de mapas e altere o endereço de tiles em `drawMap`.
+
+O servidor vincula apenas `127.0.0.1`, valida Host/Origin e aceita JSON na escrita. Não há login, papéis por usuário, anexos, atualização em tempo real ou trilha de auditoria inviolável. O histórico acompanha o workspace e pode ser substituído por um backup. Antes de disponibilizar um backend em rede ou para várias pessoas, implementar autenticação, autorização, HTTPS, auditoria no servidor, backup automatizado e migração do snapshot para tabelas relacionais/API por entidade. O MVP atual foi dimensionado para uso local e demonstração individual.
+
+## Verificação
+
+```text
+npm run check
+npm test
+```
+
+Os testes cobrem a base inicial, transferências, retirada do último responsável e da última pessoa, prazos, datas inválidas, matrículas duplicadas, relações órfãs, importações inválidas, persistência após reinício, conflito de revisão e recusa de origem externa. A interface também foi conferida no navegador em desktop e celular, incluindo confirmação com aviso de responsável, movimentação com histórico, cadastro salvo e mapa carregado.
+
+Referências de implementação: [SQLite no Node.js](https://nodejs.org/api/sqlite.html) e [Leaflet](https://leafletjs.com/).
