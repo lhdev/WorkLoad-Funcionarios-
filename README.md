@@ -40,8 +40,9 @@ Os dados do navegador pertencem à origem e ao perfil utilizado. Excluir o armaz
 - **Dashboard:** indicadores, distribuição de equipes, progresso físico, prazo decorrido, duração total prevista e dias restantes. Busca, status e UF filtram as obras e os indicadores; os totais gerais de funcionários disponíveis continuam identificados como totais da base. O gráfico exibe as seis maiores equipes; a tabela contém todas as obras filtradas.
 - **Mapa de obras:** zoom, arraste, pins e lista de projetos. Selecione um pin para ver cidade/UF, equipe, status, progresso e responsáveis. Selecione Ver projeto para editar. As coordenadas iniciais representam centros das cidades da demonstração; substitua pelas coordenadas reais das obras.
 - **Alocação de equipe:** colunas por obra e Sem alocação. Arraste um cartão entre colunas. A ação só é gravada após confirmação. No celular ou pelo teclado, use Mover. Role o quadro horizontalmente para acessar as demais obras.
-- **Projetos:** criar, consultar, editar e excluir. Configure nome, cidade, UF, coordenadas, datas, status, progresso, metas e campos adicionais com nome/valor (cliente, contrato, fase, orçamento etc.). Os campos adicionais são específicos de cada projeto e podem ser acrescentados/removidos. Aloque a equipe pelo quadro e então selecione um ou vários responsáveis no formulário do projeto.
-- **Funcionários:** criar, editar, consultar, excluir e realocar. Matrícula é obrigatória e única; nenhuma informação pessoal real é necessária.
+- **Cronograma:** grade diária por mês com os funcionários agrupados pelos projetos atuais. As barras usam as datas previstas do projeto e suas cores indicam o status; é possível filtrar por mês, departamento, busca, status e UF. O cronograma não representa histórico individual de alocações.
+- **Projetos:** criar, consultar, editar e excluir. Configure nome, cidade, UF, coordenadas, datas, status, mínimos de funcionários por departamento, metas e campos adicionais com nome/valor (cliente, contrato, fase, orçamento etc.). O progresso é calculado automaticamente pelo tempo decorrido entre início e conclusão prevista. Os campos adicionais são específicos de cada projeto e podem ser acrescentados/removidos. Aloque a equipe pelo quadro e então selecione um ou vários responsáveis no formulário do projeto.
+- **Funcionários:** criar, editar, consultar, excluir e realocar. Importe vários funcionários de uma vez por CSV na tela Funcionários; use **Baixar modelo CSV** para obter um arquivo pronto com as colunas `NOME` e `SETOR`. O arquivo precisa conter Nome e Departamento ou Setor; Função e Matrícula são opcionais. Se Função não for informada, o departamento será usado também como função; matrículas preenchidas precisam ser únicas. Os funcionários importados ficam sem alocação e não substituem registros existentes. No cadastro individual, selecione o departamento na lista logo abaixo do nome; a lista é agrupada e filtrável por Segurança do Trabalho, Eletricista, Engenheiro civil, Engenheiro elétrico, SPCS e Almoxarifado. Nenhuma informação pessoal real é necessária.
 - **Central de alertas:** selecione um alerta para abrir o projeto e corrigir sua causa.
 - **Histórico:** registra transferências, criação, edição, exclusão e desalocação por exclusão de projeto. Os registros preservam os nomes dos projetos e das pessoas no momento do evento.
 - **Configurações:** antecedência dos alertas, exportação, importação e criação de base vazia.
@@ -49,25 +50,28 @@ Os dados do navegador pertencem à origem e ao perfil utilizado. Excluir o armaz
 ## Regras e validações
 
 1. Projeto Ativo sem responsáveis gera alerta crítico. Responsáveis devem integrar a equipe da própria obra.
-2. Projeto sem funcionários gera alerta, inclusive quando planejado ou pausado.
+2. Cada projeto permite definir um número mínimo de funcionários para cada departamento. Quando a equipe alocada fica abaixo do mínimo, é gerado um alerta com a quantidade faltante; mínimo zero não gera alerta de equipe.
 3. Prazo vencido gera alerta; prazo em até 14 dias por padrão gera aviso. A antecedência é configurável entre 1 e 180 dias.
 4. Projetos Concluídos não geram alertas e não recebem novas alocações até serem reabertos.
 5. Transferir um responsável remove sua designação na origem, sem designá-lo automaticamente no destino. Antes de confirmar, a interface destaca a retirada e os novos alertas de origem (inclusive se ficar sem responsável ou sem equipe). A transferência é permitida após confirmação explícita; o alerta permanece visível até correção. Não há bloqueio absoluto de obras sem responsável, pois o cadastro inicial pode estar incompleto.
 6. Excluir obra pede confirmação, preserva o histórico e envia a equipe para Sem alocação. Excluir funcionário remove suas designações e avisa se ele era responsável.
-7. Datas devem existir, e fim deve ser igual ou posterior ao início. Progresso fica entre 0 e 100. Latitude e longitude precisam estar no intervalo geográfico aproximado do Brasil. A validação de coordenadas é por faixa, não por geocodificação ou conferência exata de fronteira.
+7. Datas devem existir, e fim deve ser igual ou posterior ao início. O progresso linear pelo tempo decorrido fica entre 0 e 100; projetos concluídos exibem 100%. Latitude e longitude precisam estar no intervalo geográfico aproximado do Brasil. A validação de coordenadas é por faixa, não por geocodificação ou conferência exata de fronteira.
 8. Backups passam por validação de versão, tipos, identificadores únicos, matrículas e integridade das referências. A importação substitui a base inteira somente após confirmação. Limite de 5 MB por gravação/importação; até 1.000 projetos, 10.000 funcionários e 50.000 eventos no esquema. Esses limites são de validação, não garantia de desempenho nesses volumes.
 
-Os prazos usam dias corridos e a data corrente em America/Sao_Paulo. Datas da interface usam pt-BR. Tempo restante é uma diferença entre a data atual e a conclusão prevista, não uma previsão automática baseada em produtividade. A faixa do cronograma compara percentual do prazo decorrido e progresso informado. Os alertas são recalculados ao navegar/alterar a base; não há envio de e-mail ou notificação em segundo plano.
+Os prazos usam dias corridos e a data corrente em America/Sao_Paulo. Datas da interface usam pt-BR. Tempo restante é uma diferença entre a data atual e a conclusão prevista, não uma previsão baseada em produtividade. O progresso exibido corresponde ao percentual do prazo decorrido. Os alertas são recalculados ao navegar/alterar a base; não há envio de e-mail ou notificação em segundo plano.
 
 ## Substituir a demonstração por dados reais
 
 1. Exporte o backup fictício como referência.
 2. Em Configurações, selecione Criar base vazia e confirme.
-3. Cadastre projetos e funcionários, defina coordenadas, datas, metas e campos adicionais.
-4. Aloque funcionários e designe os responsáveis de cada obra.
-5. Confira os alertas e exporte o primeiro backup real.
+3. Cadastre projetos e importe funcionários por CSV pela tela Funcionários. A primeira linha deve conter `Nome` e `Departamento` ou `Setor`; `Função` e `Matrícula` são opcionais. Se Função for omitida, o departamento será usado como função. Use vírgula ou ponto e vírgula como separador. Excel com CSV separado por ponto e vírgula e UTF-8 com BOM é compatível. Os departamentos devem corresponder às opções cadastradas. A importação adiciona os funcionários à base atual, não substitui registros, e todos entram sem alocação.
+4. Defina coordenadas, datas, metas e campos adicionais dos projetos.
+5. Aloque funcionários e designe os responsáveis de cada obra.
+6. Confira os alertas e exporte o primeiro backup real.
 
 Também é possível editar uma cópia do backup JSON e importá-la. Preserve `version: 1`, `settings`, os identificadores únicos e as referências: `employee.projectId` deve ser `null` ou um ID existente, e `project.responsibles` contém IDs de funcionários alocados nesse projeto. Valores de campos adicionais são texto. O arquivo `dist/seed.js` contém o gerador de demonstração, executado apenas quando ainda não há base.
+
+Funcionários de bases ou backups anteriores, que ainda não tenham o campo `department`, são migrados sem alterar `version: 1` e aparecem como **Não definido**. Atribua o departamento correto ao editar o cadastro; a migração não tenta deduzir a área pela função.
 
 Não inclua documentos, salários, localização individual ou outros dados pessoais desnecessários. Se importar uma base real na versão hospedada, os registros ficam no navegador; para uso regular, prefira o servidor local ou uma implantação empresarial com controle de acesso.
 
@@ -76,6 +80,9 @@ Não inclua documentos, salários, localização individual ou outros dados pess
 - `dist/index.html` e `dist/styles.css`: estrutura e interface responsiva.
 - `dist/app.js`: páginas, mapa, Kanban, formulários, confirmação, backup e persistência.
 - `dist/domain.js`: validações, alertas, calendário e transferências; compartilhado pelo frontend e backend.
+- `dist/departments.js`: catálogo único de departamentos utilizado na validação, nos formulários e na listagem.
+- `dist/employee-csv.js`: leitura e validação de arquivos CSV de funcionários.
+- `dist/schedule.css`: grade mensal do cronograma por projeto e funcionário.
 - `dist/seed.js`: dados inteiramente fictícios, com datas relativas ao primeiro acesso.
 - `dist/runtime.js`: seleciona o modo do armazenamento em hospedagem estática.
 - `server.mjs`: servidor HTTP e API `GET /api/state`, `PUT /api/state`.
