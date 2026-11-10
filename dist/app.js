@@ -9,6 +9,7 @@ import {
   migrate,
   statuses,
   projectProgress,
+  measuredProgress,
 } from "./domain.js";
 import {
   departments,
@@ -46,6 +47,9 @@ const icons = {
   download: "M12 3v12 m-5-5 5 5 5-5 M4 16v5h16v-5",
   clock: "M12 8v5l3 2 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
   check: "m5 12 4 4L19 6",
+  curve: "M3 19c4-1 5-12 9-12s4 10 9 10 M3 21h18 M3 21V3",
+  kpi: "M4 19V9 M10 19V5 M16 19v-7 M22 19H2",
+  gantt: "M3 5h8 M3 10h14 M3 15h11 M3 20h17",
 };
 const icon = (n) =>
   `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${icons[n] || icons.project}"/></svg>`;
@@ -71,6 +75,7 @@ let state,
   statusFilter = "",
   ufFilter = "",
   departmentFilter = "",
+  curveProjectId = "",
   map,
   dragId = null,
   saving = false;
@@ -161,6 +166,9 @@ const nav = [
   ["employees", "people", "Funcionários"],
   ["alerts", "alert", "Central de alertas"],
   ["history", "history", "Histórico"],
+  ["curve-s", "curve", "Curva S"],
+  ["kpis", "kpi", "KPIs"],
+  ["gantt", "gantt", "Gantt"],
 ];
 const titles = {
   dashboard: [
@@ -187,6 +195,18 @@ const titles = {
   history: [
     "Histórico da operação",
     "Um registro das alocações e alterações realizadas.",
+  ],
+  "curve-s": [
+    "Curva S de avanço físico",
+    "Compare o avanço planejado pelo prazo com as medições reais registradas.",
+  ],
+  kpis: [
+    "Indicadores da operação",
+    "Acompanhe prazos, medições, avanço e alertas de equipe.",
+  ],
+  gantt: [
+    "Gantt dos projetos",
+    "Visualize durações planejadas, avanço e posição atual de cada obra.",
   ],
   settings: [
     "Configurações e dados",
@@ -218,7 +238,7 @@ function render() {
               "",
             )}</select><span class="filter-count">${projects.length} projetos</span>${query || statusFilter || ufFilter ? button("Limpar", "clear") : ""}</div>`
         : ""
-    }<div id="page-content">${{ dashboard: dashboard, map: mapPage, board: board, projects: projectsPage, employees: employeesPage, alerts: alertsPage, history: historyPage, settings: settingsPage }[page](projects)}</div><footer>Workload Funcionários <span>•</span> ${mode === "server" ? "Persistência local em SQLite" : "Persistência no navegador • faça backups regulares"}<span>•</span> ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</footer></div></main>`;
+    }<div id="page-content">${{ dashboard: dashboard, map: mapPage, board: board, projects: projectsPage, employees: employeesPage, alerts: alertsPage, history: historyPage, settings: settingsPage, "curve-s": curveSPage, kpis: kpisPage, gantt: ganttPage }[page](projects)}</div><footer>Workload Funcionários <span>•</span> ${mode === "server" ? "Persistência local em SQLite" : "Persistência no navegador • faça backups regulares"}<span>•</span> ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "America/Sao_Paulo" }).format(new Date())}</footer></div></main>`;
   wire();
   if (page === "map") drawMap(projects);
   if (page === "dashboard") drawMap(projects, true);
@@ -450,7 +470,7 @@ function detail(id) {
       Object.entries(p.fields)
         .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
         .join("") || "<p>Nenhum campo adicional.</p>"
-    }</dl><div class="modal-actions">${button("Excluir projeto", "project-delete", id, "danger-button")}${button("Editar projeto", "project-edit", id, "primary")}</div>`,
+    }</dl><div class="modal-actions">${button("Registrar medição", "record-measurement", id)}${button("Excluir projeto", "project-delete", id, "danger-button")}${button("Editar projeto", "project-edit", id, "primary")}</div>`,
     true,
   );
 }
@@ -826,6 +846,7 @@ const actions = {
   "employee-new": () => employeeForm(),
   "employee-edit": employeeForm,
   move: (id) => requestMove(id),
+  "record-measurement": (id) => measurementForm(id),
   export: exportData,
   "field-add": () =>
     $("#custom-fields").insertAdjacentHTML("beforeend", customRow()),
@@ -862,6 +883,9 @@ const actions = {
           );
           e.projectId = null;
         }
+        next.measurements = (next.measurements || []).filter(
+          (measurement) => measurement.projectId !== id,
+        );
         next.projects = next.projects.filter((p) => p.id !== id);
         event(next, "Projeto excluído", p.name);
         return persist(next, "Projeto excluído.");
@@ -897,6 +921,7 @@ const actions = {
             version: 1,
             projects: [],
             employees: [],
+            measurements: [],
             history: [],
             settings: { ...state.settings },
           },
@@ -1107,6 +1132,323 @@ function schedulePage() {
     .join("");
   return `<section class="panel schedule-panel"><div class="schedule-toolbar"><div><h2>Equipe por projeto</h2><p>Período planejado de cada projeto, detalhado por funcionário.</p></div><div class="schedule-controls"><label>Departamento<select id="schedule-department"><option value="">Todos os departamentos</option>${employeeDepartments.map((department) => `<option value="${esc(department)}" ${department === departmentFilter ? "selected" : ""}>${esc(department)}</option>`).join("")}</select></label><label>Mês<input id="schedule-month" type="month" value="${esc(scheduleMonth)}"></label></div></div><div class="schedule-legend"><span><i class="active"></i>Ativa</span><span><i class="planned"></i>Planejada</span><span><i class="paused"></i>Pausada</span><span><i class="complete"></i>Concluída</span></div><div class="schedule-scroll"><div class="schedule-timeline"><div class="schedule-header"><b>COLABORADOR</b><div class="schedule-track schedule-days">${dayHeaders}</div></div>${groupHtml}${unallocated.length ? `<div class="schedule-group available"><div><span class="schedule-group-dot planned"></span><b>Sem alocação</b><small>${unallocated.length} ${unallocated.length === 1 ? "funcionário disponível" : "funcionários disponíveis"}</small></div></div>${rowsFor(null, unallocated)}` : ""}${!groups.length && !unallocated.length ? '<div class="empty">Nenhum funcionário encontrado para os filtros atuais.</div>' : ""}</div></div><p class="schedule-note">As barras representam as datas de início e conclusão previstas do projeto; não indicam períodos individuais de trabalho.</p></section>`;
 }
+function latestMeasurement(projectId, date = today()) {
+  return (
+    (state.measurements || [])
+      .filter(
+        (measurement) =>
+          measurement.projectId === projectId && measurement.date <= date,
+      )
+      .sort((a, b) => b.date.localeCompare(a.date))[0] || null
+  );
+}
+function plannedProgressAt(project, date) {
+  const duration = days(project.start, project.end);
+  if (duration <= 0) return date < project.start ? 0 : 100;
+  return Math.round(
+    Math.max(0, Math.min(1, days(project.start, date) / duration)) * 100,
+  );
+}
+function measurementForm(projectId = "") {
+  if (!state.projects.length) {
+    toast("Cadastre um projeto antes de registrar medições.", true);
+    return;
+  }
+  const defaultProject =
+    state.projects.find((project) => project.id === projectId) ||
+    state.projects[0];
+  openDialog(
+    `<div class="eyebrow">AVANÇO FÍSICO</div><h2>Registrar medição</h2><p>Informe o avanço físico real apurado na data. Uma nova medição no mesmo dia atualiza o registro existente.</p><form id="measurement-form"><div class="form-grid"><label class="span2">Projeto<select name="projectId" required>${state.projects.map((project) => `<option value="${esc(project.id)}" ${project.id === defaultProject.id ? "selected" : ""}>${esc(project.name)} · ${esc(project.uf)}</option>`).join("")}</select></label>${field("Data da medição", "date", today(), "date", `required max="${today()}"`)}${field("Avanço real (%)", "progress", "", "number", 'required min="0" max="100" step="1"')}<label class="span2">Observação (opcional)<textarea name="note" rows="3" maxlength="500" placeholder="Ex.: medição aprovada pelo gestor"></textarea></label></div><div id="form-error" role="alert"></div><div class="modal-actions">${button("Cancelar", "close")}<button class="primary" type="submit">Salvar medição</button></div></form>`,
+  );
+  const form = $("#measurement-form");
+  const fillExisting = () => {
+    const project = state.projects.find(
+      (item) => item.id === form.elements.projectId.value,
+    );
+    const existing = (state.measurements || []).find(
+      (measurement) =>
+        measurement.projectId === project.id &&
+        measurement.date === form.elements.date.value,
+    );
+    const previous = latestMeasurement(project.id, form.elements.date.value);
+    form.elements.progress.value =
+      existing?.progress ?? previous?.progress ?? "";
+    form.elements.note.value = existing?.note ?? "";
+  };
+  form.elements.projectId.addEventListener("change", fillExisting);
+  form.elements.date.addEventListener("change", fillExisting);
+  fillExisting();
+  form.onsubmit = async (eventObject) => {
+    eventObject.preventDefault();
+    const values = new FormData(form);
+    const next = structuredClone(state);
+    next.measurements ||= [];
+    const project = next.projects.find(
+      (item) => item.id === values.get("projectId"),
+    );
+    const date = values.get("date");
+    const existing = next.measurements.find(
+      (measurement) =>
+        measurement.projectId === project.id && measurement.date === date,
+    );
+    const measurement = {
+      id: existing?.id || crypto.randomUUID(),
+      projectId: project.id,
+      date,
+      progress: Number(values.get("progress")),
+      note: values.get("note").trim(),
+    };
+    if (existing) Object.assign(existing, measurement);
+    else next.measurements.push(measurement);
+    event(
+      next,
+      existing
+        ? "Medição de avanço atualizada"
+        : "Medição de avanço registrada",
+      project.name,
+      date,
+      `${measurement.progress}%`,
+    );
+    try {
+      validate(next);
+      if (await persist(next, "Medição salva.")) closeDialog();
+    } catch (error) {
+      $("#form-error").textContent = error.message;
+    }
+  };
+}
+function curveSPage(projects) {
+  const project =
+    projects.find((item) => item.id === curveProjectId) || projects[0];
+  curveProjectId = project?.id || "";
+  if (!project) return empty("Cadastre um projeto para visualizar a Curva S.");
+  const measurements = (state.measurements || [])
+    .filter((measurement) => measurement.projectId === project.id)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const start = Date.parse(project.start + "T12:00:00Z");
+  const end = Date.parse(project.end + "T12:00:00Z");
+  const times = [
+    start,
+    end,
+    ...measurements.map((measurement) =>
+      Date.parse(measurement.date + "T12:00:00Z"),
+    ),
+  ];
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times, minTime + 86400000);
+  const left = 72,
+    right = 28,
+    top = 30,
+    bottom = 54,
+    width = 960,
+    height = 420;
+  const chartWidth = width - left - right,
+    chartHeight = height - top - bottom;
+  const x = (time) =>
+    left + ((time - minTime) / (maxTime - minTime)) * chartWidth;
+  const y = (progress) => top + (1 - progress / 100) * chartHeight;
+  const planned = [`${x(start)},${y(0)}`, `${x(end)},${y(100)}`].join(" ");
+  const actual = measurements
+    .map(
+      (measurement) =>
+        `${x(Date.parse(measurement.date + "T12:00:00Z"))},${y(measurement.progress)}`,
+    )
+    .join(" ");
+  const yGrid = [0, 25, 50, 75, 100]
+    .map(
+      (progress) =>
+        `<g><line x1="${left}" y1="${y(progress)}" x2="${width - right}" y2="${y(progress)}" class="chart-grid-line"/><text x="${left - 12}" y="${y(progress) + 4}" text-anchor="end" class="chart-axis-label">${progress}%</text></g>`,
+    )
+    .join("");
+  const xTicks = Array.from({ length: 5 }, (_, index) => {
+    const time = minTime + ((maxTime - minTime) * index) / 4;
+    const label = new Intl.DateTimeFormat("pt-BR", {
+      month: "short",
+      year: "2-digit",
+      timeZone: "UTC",
+    }).format(new Date(time));
+    return `<g><line x1="${x(time)}" y1="${top}" x2="${x(time)}" y2="${height - bottom}" class="chart-grid-line vertical"/><text x="${x(time)}" y="${height - 20}" text-anchor="middle" class="chart-axis-label">${esc(label)}</text></g>`;
+  }).join("");
+  const actualLine =
+    measurements.length > 1
+      ? `<polyline points="${actual}" class="curve-actual-line"/>`
+      : "";
+  const points = measurements
+    .map(
+      (measurement) =>
+        `<circle cx="${x(Date.parse(measurement.date + "T12:00:00Z"))}" cy="${y(measurement.progress)}" r="5" class="curve-measurement-point"><title>${fmt(measurement.date)} · ${measurement.progress}%${measurement.note ? " · " + esc(measurement.note) : ""}</title></circle>`,
+    )
+    .join("");
+  const latest = latestMeasurement(project.id);
+  return `<section class="panel analytics-panel"><div class="analytics-toolbar"><div><h2>Avanço físico acumulado</h2><p>Planejado pela duração do projeto e avanço real medido.</p></div><div class="analytics-controls"><label>Projeto<select id="curve-project">${projects.map((item) => `<option value="${esc(item.id)}" ${item.id === project.id ? "selected" : ""}>${esc(item.name)}</option>`).join("")}</select></label>${button("＋ Registrar medição", "record-measurement", project.id, "primary")}</div></div><div class="curve-legend"><span><i class="planned-key"></i>Planejado (referência linear pelas datas)</span><span><i class="actual-key"></i>Real medido</span></div><div class="chart-scroll"><svg class="curve-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Curva S do projeto ${esc(project.name)}">${yGrid}${xTicks}<polyline points="${planned}" class="curve-planned-line"/>${actualLine}${points}<text x="${left}" y="${height - 3}" class="chart-axis-label">${fmt(project.start)}</text><text x="${width - right}" y="${height - 3}" text-anchor="end" class="chart-axis-label">${fmt(project.end)}</text></svg></div>${latest ? `<div class="measurement-summary"><b>Última medição: ${latest.progress}%</b><span>${fmt(latest.date)}${latest.note ? " · " + esc(latest.note) : ""}</span><span>Referência planejada na data: ${plannedProgressAt(project, latest.date)}%</span></div>` : '<div class="measurement-empty">Ainda não há medições reais para este projeto. Registre uma medição para iniciar a curva do avanço real.</div>'}<p class="chart-disclaimer">A linha planejada é uma referência linear entre as datas do projeto, não uma linha de base aprovada. Registre as medições reais periodicamente; não são gerados dados históricos automaticamente.</p></section>`;
+}
+function kpisPage(projects) {
+  const overdue = projects.filter(
+    (project) => project.status !== "Concluída" && project.end < today(),
+  ).length;
+  const active = projects.filter(
+    (project) => project.status === "Ativa",
+  ).length;
+  const reports = projects
+    .map((project) => ({ project, measurement: latestMeasurement(project.id) }))
+    .filter((item) => item.measurement);
+  const actualAverage = reports.length
+    ? Math.round(
+        reports.reduce((sum, item) => sum + item.measurement.progress, 0) /
+          reports.length,
+      )
+    : null;
+  const plannedAverage = reports.length
+    ? Math.round(
+        reports.reduce(
+          (sum, item) =>
+            sum + plannedProgressAt(item.project, item.measurement.date),
+          0,
+        ) / reports.length,
+      )
+    : null;
+  const variance =
+    actualAverage === null ? null : actualAverage - plannedAverage;
+  const staffingAlerts = alerts(state).filter(
+    (alert) =>
+      alert.type === "staffing" &&
+      projects.some((project) => project.id === alert.projectId),
+  ).length;
+  const allocated = state.employees.filter(
+    (employee) =>
+      employee.projectId &&
+      projects.some((project) => project.id === employee.projectId),
+  ).length;
+  const metrics = [
+    ["Projetos no filtro", projects.length, "Carteira selecionada", "project"],
+    ["Projetos ativos", active, "Status Ativa", "clock"],
+    [
+      "Projetos fora do prazo",
+      overdue,
+      "Não concluídos com prazo vencido",
+      "alert",
+    ],
+    [
+      "Avanço real médio",
+      actualAverage === null ? "—" : `${actualAverage}%`,
+      `${reports.length} de ${projects.length} projetos com medição`,
+      "curve",
+    ],
+    [
+      "Desvio médio do plano",
+      variance === null ? "—" : `${variance > 0 ? "+" : ""}${variance} p.p.`,
+      variance === null
+        ? "Registre medições para calcular"
+        : `Planejado na data: ${plannedAverage}%`,
+      "kpi",
+    ],
+    [
+      "Alertas de equipe",
+      staffingAlerts,
+      "Abaixo do mínimo por departamento",
+      "people",
+    ],
+    [
+      "Funcionários alocados",
+      allocated,
+      `${state.employees.filter((employee) => !employee.projectId).length} sem alocação na base`,
+      "people",
+    ],
+  ];
+  return `<div class="kpi-grid">${metrics.map(([label, value, caption, symbol]) => `<article class="panel kpi-card"><span>${esc(label)}${icon(symbol)}</span><strong>${value}</strong><small>${esc(caption)}</small></article>`).join("")}</div><section class="panel kpi-detail"><div class="panel-heading"><div><h2>Avanço medido por projeto</h2><p>O desvio compara a última medição com o prazo decorrido na data do registro.</p></div>${button("Ver Curva S", "nav", "curve-s", "text-button")}</div><div class="table-wrap"><table><thead><tr><th>PROJETO</th><th>STATUS</th><th>MEDIÇÃO</th><th>PLANEJADO NA DATA</th><th>DESVIO</th></tr></thead><tbody>${
+    projects
+      .map((project) => {
+        const measurement = latestMeasurement(project.id);
+        const planned = measurement
+          ? plannedProgressAt(project, measurement.date)
+          : null;
+        const delta = measurement ? measurement.progress - planned : null;
+        return `<tr><td><b>${esc(project.name)}</b><small>${esc(project.city)} · ${esc(project.uf)}</small></td><td>${badge(project)}</td><td>${measurement ? `${measurement.progress}%<small>${fmt(measurement.date)}</small>` : '<span class="muted">Sem medição</span>'}</td><td>${planned === null ? "—" : `${planned}%`}</td><td>${delta === null ? "—" : `<b class="${delta < 0 ? "danger-text" : "positive-text"}">${delta > 0 ? "+" : ""}${delta} p.p.</b>`}</td></tr>`;
+      })
+      .join("") ||
+    '<tr><td colspan="5">Nenhum projeto para os filtros.</td></tr>'
+  }</tbody></table></div><p class="chart-disclaimer">Indicadores de avanço usam somente medições registradas. Projetos sem medição não entram nas médias de avanço/desvio.</p></section>`;
+}
+function ganttPage(projects) {
+  if (!projects.length) return empty();
+  const monthStart = (date) =>
+    Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, 1);
+  const firstMonth = Math.min(
+    ...projects.map((project) => monthStart(project.start)),
+  );
+  const lastMonth = Math.max(
+    ...projects.map((project) => monthStart(project.end)),
+  );
+  const monthCount = Math.max(
+    1,
+    (new Date(lastMonth).getUTCFullYear() -
+      new Date(firstMonth).getUTCFullYear()) *
+      12 +
+      new Date(lastMonth).getUTCMonth() -
+      new Date(firstMonth).getUTCMonth() +
+      1,
+  );
+  const timelineStart = firstMonth;
+  const timelineEnd = Date.UTC(
+    new Date(lastMonth).getUTCFullYear(),
+    new Date(lastMonth).getUTCMonth() + 1,
+    1,
+  );
+  const chartWidth = Math.max(900, monthCount * 90);
+  const labelWidth = 290,
+    rowHeight = 58,
+    headerHeight = 48,
+    svgHeight = headerHeight + projects.length * rowHeight + 20,
+    svgWidth = labelWidth + chartWidth + 24;
+  const x = (date) =>
+    labelWidth +
+    ((Date.parse(date + "T12:00:00Z") - timelineStart) /
+      (timelineEnd - timelineStart)) *
+      chartWidth;
+  const monthTicks = [];
+  for (
+    let time = timelineStart;
+    time < timelineEnd;
+    time = Date.UTC(
+      new Date(time).getUTCFullYear(),
+      new Date(time).getUTCMonth() + 1,
+      1,
+    )
+  ) {
+    const date = new Date(time);
+    monthTicks.push(
+      `<line x1="${labelWidth + ((time - timelineStart) / (timelineEnd - timelineStart)) * chartWidth}" y1="${headerHeight}" x2="${labelWidth + ((time - timelineStart) / (timelineEnd - timelineStart)) * chartWidth}" y2="${svgHeight}" class="chart-grid-line vertical"/><text x="${labelWidth + ((time - timelineStart) / (timelineEnd - timelineStart)) * chartWidth + 5}" y="29" class="gantt-month-label">${new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit", timeZone: "UTC" }).format(date)}</text>`,
+    );
+  }
+  const rows = projects
+    .map((project, index) => {
+      const y = headerHeight + index * rowHeight;
+      const startX = x(project.start),
+        endX = x(project.end);
+      const measurement = latestMeasurement(project.id);
+      const progress = measurement
+        ? measurement.progress
+        : projectProgress(project);
+      const fillWidth = Math.max(0, ((endX - startX) * progress) / 100);
+      const statusClass =
+        project.status === "Concluída"
+          ? "complete"
+          : project.status === "Pausada"
+            ? "paused"
+            : project.status === "Planejada"
+              ? "planned"
+              : "active";
+      return `<g class="gantt-row"><line x1="0" y1="${y + rowHeight - 1}" x2="${svgWidth}" y2="${y + rowHeight - 1}" class="gantt-row-line"/><text x="12" y="${y + 22}" class="gantt-project-name">${esc(project.name)}</text><text x="12" y="${y + 40}" class="gantt-project-meta">${fmt(project.start)} → ${fmt(project.end)} · ${measurement ? "medido" : "estimado"}</text><text x="${labelWidth - 14}" y="${y + 31}" text-anchor="end" class="gantt-progress-label">${progress}%</text><rect x="${startX}" y="${y + 16}" width="${Math.max(3, endX - startX)}" height="22" rx="5" class="gantt-bar-plan"/><rect x="${startX}" y="${y + 16}" width="${Math.min(Math.max(3, endX - startX), fillWidth)}" height="22" rx="5" class="gantt-bar-actual ${statusClass}"><title>${esc(project.name)} · ${progress}% ${measurement ? "medido" : "estimado pelo prazo"}</title></rect><path d="M${endX - 5} ${y + 27}l5-5 5 5-5 5z" class="gantt-milestone"/></g>`;
+    })
+    .join("");
+  const todayX =
+    Date.parse(today() + "T12:00:00Z") >= timelineStart &&
+    Date.parse(today() + "T12:00:00Z") <= timelineEnd
+      ? `<line x1="${x(today())}" y1="${headerHeight}" x2="${x(today())}" y2="${svgHeight}" class="gantt-today-line"/><text x="${x(today()) + 5}" y="${headerHeight - 8}" class="gantt-today-label">Hoje</text>`
+      : "";
+  return `<section class="panel gantt-panel"><div class="analytics-toolbar"><div><h2>Prazo e avanço dos projetos</h2><p>Barra clara: duração planejada · preenchimento: avanço real medido ou estimado pelo prazo.</p></div><div class="gantt-legend"><span><i class="planned-key"></i>Planejado</span><span><i class="actual-key"></i>Avanço</span><span><i class="today-key"></i>Hoje</span></div></div><div class="gantt-scroll"><svg class="gantt-chart" viewBox="0 0 ${svgWidth} ${svgHeight}" role="img" aria-label="Gráfico Gantt dos projetos selecionados"><text x="12" y="29" class="gantt-month-label">PROJETO · PRAZO · AVANÇO</text>${monthTicks.join("")}${todayX}${rows}</svg></div><p class="chart-disclaimer">O Gantt usa datas cadastradas. Quando existe medição, o preenchimento mostra o avanço real; sem medição, mostra a estimativa automática pelo tempo decorrido. Edite datas incorretas no cadastro do projeto.</p></section>`;
+}
+actions["record-measurement"] = (id) => measurementForm(id);
 const renderStandard = render;
 render = function () {
   const showSchedule = page === "schedule";
@@ -1143,5 +1485,10 @@ wire = function () {
         render();
       };
   }
+  if ($("#curve-project"))
+    $("#curve-project").onchange = (e) => {
+      curveProjectId = e.target.value;
+      render();
+    };
 };
 init();

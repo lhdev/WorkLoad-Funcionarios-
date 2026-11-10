@@ -10,9 +10,14 @@ export function projectProgress(project,date=today()){
  return Math.round(Math.max(0,Math.min(1,days(project.start,date)/duration))*100);
 }
 export const team=(s,id)=>s.employees.filter(e=>e.projectId===id);
+export function measuredProgress(s,projectId,date=today()){
+ const entries=(s.measurements||[]).filter(measurement=>measurement.projectId===projectId&&measurement.date<=date).sort((a,b)=>b.date.localeCompare(a.date));
+ return entries.length?entries[0].progress:null;
+}
 export function migrate(s){
  if(!s||s.version!==1||!Array.isArray(s.employees))throw Error('Backup inválido ou versão incompatível.');
  const next=structuredClone(s);
+ if(!Object.hasOwn(next,'measurements'))next.measurements=[];
  for(const employee of next.employees)if(!Object.hasOwn(employee,'department'))employee.department=legacyDepartment;
  for(const project of next.projects){
   if(!project.departmentMinimums)project.departmentMinimums=Object.fromEntries(departments.map(department=>[department,0]));
@@ -31,6 +36,10 @@ export function validate(s){
  const str=(x,n=200)=>typeof x==='string'&&x.length<=n;const required=x=>str(x)&&x.trim().length>0;const date=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&!isNaN(Date.parse(x))&&new Date(x).toISOString().slice(0,10)===x;
  const unique=arr=>arr.every(x=>required(x.id))&&new Set(arr.map(x=>x.id)).size===arr.length;
  if(!unique(s.projects)||!unique(s.employees))throw Error('Identificadores inválidos ou duplicados.');
+ const measurements=s.measurements===undefined?[]:s.measurements;
+ if(!Array.isArray(measurements)||measurements.length>50000||!unique(measurements)||measurements.some(measurement=>!s.projects.some(project=>project.id===measurement.projectId)||!date(measurement.date)||!Number.isInteger(measurement.progress)||measurement.progress<0||measurement.progress>100||!str(measurement.note||'',500)))throw Error('Medição inválida ou relacionada a projeto inexistente.');
+ const measurementKeys=measurements.map(measurement=>measurement.projectId+'|'+measurement.date);
+ if(new Set(measurementKeys).size!==measurementKeys.length)throw Error('Existe mais de uma medição para o mesmo projeto e data.');
  if(!s.settings||!Number.isInteger(s.settings.warningDays)||s.settings.warningDays<1||s.settings.warningDays>180)throw Error('Alerta deve ser entre 1 e 180 dias.');
  for(const e of s.employees)if(!required(e.name)||!required(e.role)||!str(e.code)||!employeeDepartments.includes(e.department)||!str(e.color,30)||(e.projectId!==null&&!s.projects.some(p=>p.id===e.projectId)))throw Error('Funcionário inválido ou alocação inexistente.');
  const codes=s.employees.map(e=>e.code.trim().toLocaleLowerCase('pt-BR')).filter(Boolean);if(new Set(codes).size!==codes.length)throw Error('A matrícula deve ser única.');
